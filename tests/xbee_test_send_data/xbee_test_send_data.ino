@@ -12,14 +12,20 @@ byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
 //fake data
-long latitude = 42443961;
-long longitude = -76501881;
+long latitude = 4244391;
+long longitude = -7650181;
 int altitude = 9999;
 byte flags = 0xF;
 
+enum States {
+ STOPPED, PRE_LAUNCH, POST_LAUNCH, SEND_DATA, READ_DATA, READ_GPS, ERROR 
+};
+
+States state = STOPPED;
+
 // XBee's DOUT (TX) is connected to pin 2 (Arduino's Software RX)
 // XBee's DIN (RX) is connected to pin 3 (Arduino's Software TX)
-SoftwareSerial XBee(2,3); // RX, TX
+SoftwareSerial XBee(10,9); // RX, TX
 
 void setup()
 {
