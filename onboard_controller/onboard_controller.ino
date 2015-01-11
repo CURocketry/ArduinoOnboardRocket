@@ -15,10 +15,12 @@ byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
 //fake data
-long latitude = 0;//42.4439;
-long longitude = 0;//-76.5018;
-int altitude = 0;//9999
-byte flags = 0xF;
+struct Payload {
+  long latitude; //42.4439;
+  long longitude;//-76.5018;
+  int altitude;//9999
+  byte flags;//0xF;
+} payload, *ptr_payload;
 
 enum States {
   STOPPED, PRE_LAUNCH, POST_LAUNCH, SEND_DATA, READ_DATA, READ_GPS, ERROR 
@@ -30,8 +32,8 @@ States state = STOPPED;
 // XBee's DIN (RX) is connected to pin 9 (Arduino's Software TX)
 SoftwareSerial XBee(10,9); // RX, TX
 
-SoftwareSerial mySerial(8, 7);
-Adafruit_GPS GPS(&mySerial);
+SoftwareSerial gpsSerial(8, 7);
+Adafruit_GPS GPS(&gpsSerial);
 
 void setup()
 {
@@ -57,7 +59,7 @@ void setup()
   delay(1000);
   
   // Ask for firmware version
-  mySerial.println(PMTK_Q_RELEASE);
+  gpsSerial.println(PMTK_Q_RELEASE);
 
 }
 
@@ -81,19 +83,19 @@ void loop()
     timer = millis(); // reset the timer
 
     if (GPS.fix) {
-      latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
-      longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
-      altitude = GPS.altitude;
+      payload.latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
+      payload.longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
+      payload.altitude = GPS.altitude;
 
       //set every byte in array to 0
       memset( buf_start, 0, MAX_BUF );
 
       //buf_start is pointer to first allocated space
       //buf_curr is pointer to next free space
-      buf_curr = stream(MARKER_LAT, buf_start, (void*)&latitude, sizeof(latitude));
-      buf_curr = stream(MARKER_LON, buf_curr, (void*)&longitude, sizeof(longitude));
-      buf_curr = stream(MARKER_ALT, buf_curr, (void*)&altitude, sizeof(altitude));
-      buf_curr = stream(MARKER_FLAG, buf_curr, (void*)&flags, sizeof(flags));
+      buf_curr = stream(MARKER_LAT, buf_start, (void*)ptr_payload->latitude, sizeof(payload.latitude));
+      buf_curr = stream(MARKER_LON, buf_curr, (void*)ptr_payload->longitude, sizeof(payload.longitude));
+      buf_curr = stream(MARKER_ALT, buf_curr, (void*)ptr_payload->altitude, sizeof(payload.altitude));
+      buf_curr = stream(MARKER_FLAG, buf_curr, (void*)ptr_payload->flags, sizeof(payload.flags));
 
       //buffer size is the difference between the current and start pointers
       buf_size = buf_curr - buf_start;
@@ -152,9 +154,3 @@ double convertDegMinToDecDeg (float degMin) {
 
   return decDeg;
 }
-
-
-
-
-
-
