@@ -2,11 +2,15 @@
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
 
+//debug macros
+#define debug //print debug info to console
+#define fakeGPS //fake the presence of a gps
+
 //make sure these match on the receiving end
-#define MARKER_LAT 0xB
-#define MARKER_LON 0xC
-#define MARKER_ALT 0xD
-#define MARKER_FLAG 0xE
+#define MARKER_LAT 0xFB
+#define MARKER_LON 0xFC
+#define MARKER_ALT 0xFD
+#define MARKER_FLAG 0xFE
 
 //Payload variables
 #define MAX_BUF 16  // Maximum payload size 
@@ -15,12 +19,10 @@ byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
 //fake data
-struct Payload {
   long latitude; //42.4439;
   long longitude;//-76.5018;
   int altitude;//9999
   byte flags;//0xF;
-} payload, *ptr_payload;
 
 enum States {
   STOPPED, PRE_LAUNCH, POST_LAUNCH, SEND_DATA, READ_DATA, READ_GPS, ERROR 
@@ -38,7 +40,7 @@ Adafruit_GPS GPS(&gpsSerial);
 void setup()
 {
   //Make sure XBee baud matches hardware config
-  XBee.begin(9600);
+  XBee.begin(115200);
   Serial.begin(115200);
   //delay(5000);
 
@@ -81,45 +83,65 @@ void loop()
 
   if (millis() - timer > 400) {
     timer = millis(); // reset the timer
-
-    if (GPS.fix) {
-      payload.latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
-      payload.longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
-      payload.altitude = GPS.altitude;
-
+    
+    #ifdef fakeGPS //fake gps data
+      latitude = 42.4439*10000;
+      longitude = 76.5018*10000;
+      altitude = 9999;
+      state = SEND_DATA;
+    #else    
+      if (GPS.fix) {
+        latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
+        longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
+        altitude = GPS.altitude;
+        state = SEND_DATA;
+      }
+      else {
+        latitude = 0;
+        longitude = 0;
+        altitude = 0;
+        
+        #ifdef debug
+          Serial.println("No fix");
+        #endif
+    #endif
+      
       //set every byte in array to 0
       memset( buf_start, 0, MAX_BUF );
 
       //buf_start is pointer to first allocated space
       //buf_curr is pointer to next free space
-      buf_curr = stream(MARKER_LAT, buf_start, (void*)ptr_payload->latitude, sizeof(payload.latitude));
-      buf_curr = stream(MARKER_LON, buf_curr, (void*)ptr_payload->longitude, sizeof(payload.longitude));
-      buf_curr = stream(MARKER_ALT, buf_curr, (void*)ptr_payload->altitude, sizeof(payload.altitude));
-      buf_curr = stream(MARKER_FLAG, buf_curr, (void*)ptr_payload->flags, sizeof(payload.flags));
+      if (latitude != 0 && longitude != 0 && altitude != 0) {
+        buf_curr = stream(MARKER_LAT, buf_start, (void*)&latitude, sizeof(latitude));
+        buf_curr = stream(MARKER_LON, buf_curr, (void*)&longitude, sizeof(longitude));
+        buf_curr = stream(MARKER_ALT, buf_curr, (void*)&altitude, sizeof(altitude));
+      }
+      
+      buf_curr = stream(MARKER_FLAG, buf_curr, (void*)&flags, sizeof(flags));
 
       //buffer size is the difference between the current and start pointers
       buf_size = buf_curr - buf_start;
 
-      //check that buffer size did not exceed allocated size
-      if( buf_size > MAX_BUF )
-      {
-        Serial.println("Buffer Overflow " + buf_size);
-      }
-
       XBee.write(buf_start, buf_size);
       //arduino is little endian (LSB first)
-
-      byte* bufferReader = buf_start;
-      Serial.print("Size: ");
-      Serial.println(buf_size);
-      while (bufferReader != buf_curr) {
-        Serial.print(*bufferReader, HEX);
-        Serial.print(" ");
-        bufferReader++;
-      }
-      Serial.println();
-
-    }
+      
+      #ifdef debug
+        //check that buffer size did not exceed allocated size
+        if( buf_size > MAX_BUF )
+        {
+          Serial.println("Buffer Overflow " + buf_size);
+        }
+        //read the contents of the buffer
+        byte* bufferReader = buf_start;
+        Serial.print("Size: ");
+        Serial.println(buf_size);
+        while (bufferReader != buf_curr) {
+          Serial.print(*bufferReader, HEX);
+          Serial.print(" ");
+          bufferReader++;
+        }
+        Serial.println();
+      #endif
   }
 }
 
