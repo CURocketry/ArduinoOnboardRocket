@@ -19,10 +19,14 @@ byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
 //fake data
+struct Payload {
   long latitude; //42.4439;
   long longitude;//-76.5018;
   int altitude;//9999
   byte flags;//0xF;
+} payload, *ptr_payload;
+
+Payload* ptr_payload = &payload;
 
 enum States {
   STOPPED, PRE_LAUNCH, POST_LAUNCH, SEND_DATA, READ_DATA, READ_GPS, ERROR 
@@ -85,21 +89,21 @@ void loop()
     timer = millis(); // reset the timer
     
     #ifdef fakeGPS //fake gps data
-      latitude = 42.4439*10000;
-      longitude = 76.5018*10000;
-      altitude = 9999;
+      payload.latitude = 42.4439*10000;
+      payload.longitude = 76.5018*10000;
+      payload.altitude = 9999;
       state = SEND_DATA;
     #else    
       if (GPS.fix) {
-        latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
-        longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
-        altitude = GPS.altitude;
+        payload.latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
+        payload.longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
+        payload.altitude = GPS.altitude;
         state = SEND_DATA;
       }
       else {
-        latitude = 0;
-        longitude = 0;
-        altitude = 0;
+        payload.latitude = 0;
+        payload.longitude = 0;
+        payload.altitude = 0;
         
         #ifdef debug
           Serial.println("No fix");
@@ -111,13 +115,13 @@ void loop()
 
       //buf_start is pointer to first allocated space
       //buf_curr is pointer to next free space
-      if (latitude != 0 && longitude != 0 && altitude != 0) {
-        buf_curr = stream(MARKER_LAT, buf_start, (void*)&latitude, sizeof(latitude));
-        buf_curr = stream(MARKER_LON, buf_curr, (void*)&longitude, sizeof(longitude));
-        buf_curr = stream(MARKER_ALT, buf_curr, (void*)&altitude, sizeof(altitude));
+      if (payload.latitude != 0 && payload.longitude != 0 && payload.altitude != 0) {
+        buf_curr = stream(MARKER_LAT, buf_start, (void*)&(ptr_payload->latitude), sizeof(payload.latitude));
+        buf_curr = stream(MARKER_LON, buf_curr, (void*)&(ptr_payload->longitude), sizeof(payload.longitude));
+        buf_curr = stream(MARKER_ALT, buf_curr, (void*)&(ptr_payload->altitude), sizeof(payload.altitude));
       }
       
-      buf_curr = stream(MARKER_FLAG, buf_curr, (void*)&flags, sizeof(flags));
+      buf_curr = stream(MARKER_FLAG, buf_curr, (void*)&(ptr_payload->flags), sizeof(payload.flags));
 
       //buffer size is the difference between the current and start pointers
       buf_size = buf_curr - buf_start;
