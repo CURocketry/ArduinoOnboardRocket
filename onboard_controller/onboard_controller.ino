@@ -3,9 +3,10 @@
 #include <SoftwareSerial.h>
 
 /*--debug macros--*/
-#define readDebug //print xbee reads to console
-//#define writeDebug //print xbee writes to console
+//#define readDebug //print Serial1 reads to console
+//#define writeDebug //print Serial1 writes to console
 #define fakeGPS //fake the presence of a gps
+//#define rawGPSDebug //print raw gps data to console
 
 //make sure these match on the receiving end
 #define MARKER_LAT 0xFB
@@ -43,9 +44,8 @@ enum States {
 
 States state = STOPPED;
 
-// XBee's DOUT (TX) is connected to pin 10 (Arduino's Software RX)
-// XBee's DIN (RX) is connected to pin 9 (Arduino's Software TX)
-SoftwareSerial XBee(10,9); // RX, TX
+// XBee's DOUT (TX) is connected to pin 0 (Arduino's Hardware RX)
+// XBee's DIN (RX) is connected to pin 1 (Arduino's Hardware TX)
 
 SoftwareSerial gpsSerial(8, 7);
 Adafruit_GPS GPS(&gpsSerial);
@@ -54,8 +54,8 @@ void setup()
 {
   pinMode(PIN_PAYLOAD, OUTPUT);
   
-  //Make sure XBee baud matches hardware config
-  XBee.begin(57600);//115200);
+  //Make sure Serial baud matches hardware config
+  Serial1.begin(57600); //XBee baud rate
   Serial.begin(115200);
 
   // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
@@ -83,16 +83,14 @@ uint32_t timer = millis();
 
 void loop()
 {
-  gpsSerial.listen(); //switch to GPS serial
-  delayMicroseconds(150);
-  while (gpsSerial.available()) {
-    char c = GPS.read();
-  // if you want to debug, this is a good time to do it!
-  if ((c))
-    Serial.write(c); 
-  }
-  
-  XBee.listen();
+  #ifdef rawGPSDebug
+    while (gpsSerial.available()) {
+      char c = GPS.read();
+      if (c) {
+        Serial.write(c);
+      } 
+    }
+  #endif
   
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
@@ -100,22 +98,26 @@ void loop()
       return;  // we can fail to parse a sentence in which case we should just wait for another
   }
  
-     if (XBee.available()) {
-      byte receivedPayload = XBee.read();
-      switch (receivedPayload) {
-        case FLAG_PAYLOAD:
-          digitalWrite(PIN_PAYLOAD,HIGH);
-          break;
-        default:
+  //handle XBee received data
+  if (Serial1.available()) {
+    byte receivedPayload = Serial1.read();
+    switch (receivedPayload) {
+      case FLAG_PAYLOAD:
+        if ( digitalRead(PIN_PAYLOAD) == HIGH )
           digitalWrite(PIN_PAYLOAD,LOW);
-          break;
-      }
-      #ifdef readDebug
-        Serial.print("size: ");
-        Serial.println(XBee.available());
-        Serial.println(receivedPayload, HEX);
-      #endif
+        else digitalWrite(PIN_PAYLOAD,HIGH);
+        break;
+      default:
+        digitalWrite(PIN_PAYLOAD,LOW);
+        break;
     }
+    #ifdef readDebug
+      Serial.print("read size: ");
+      Serial.println(Serial.available());
+      Serial.println(receivedPayload, HEX);
+    #endif
+  }
+  
   // if millis() or timer wraps around, reset
   if (timer > millis())  timer = millis();
   if (millis() - timer > 400) {
@@ -159,7 +161,8 @@ void loop()
       //buffer size is the difference between the current and start pointers
       buf_size = buf_curr - buf_start;
 
-      XBee.write(buf_start, buf_size);
+      Serial1.write(buf_start, buf_size);
+       delayMicroseconds(50);
       //arduino is little endian (LSB first)
       
       #ifdef writeDebug
@@ -170,7 +173,7 @@ void loop()
         }
         //read the contents of the buffer
         byte* bufferReader = buf_start;
-        Serial.print("Size: ");
+        Serial.print("write size: ");
         Serial.println(buf_size);
         while (bufferReader != buf_curr) {
           Serial.print(*bufferReader, HEX);
@@ -178,10 +181,6 @@ void loop()
           bufferReader++;
         }
         Serial.println();
-        
-          if (XBee.overflow()) {
-           Serial.println("XBee serial buffer overflow!");
-          } 
       #endif
   }
 }
