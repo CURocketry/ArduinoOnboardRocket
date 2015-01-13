@@ -2,8 +2,9 @@
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
 
-//debug macros
-#define debug //print debug info to console
+/*--debug macros--*/
+#define readDebug //print xbee reads to console
+//#define writeDebug //print xbee writes to console
 #define fakeGPS //fake the presence of a gps
 
 //make sure these match on the receiving end
@@ -11,6 +12,13 @@
 #define MARKER_LON 0xFC
 #define MARKER_ALT 0xFD
 #define MARKER_FLAG 0xFE
+#define FLAG_GPS_FIX 0b00000001
+#define FLAG_PAYLOAD 0b00000010
+
+//make sure these match on the sending end
+#define FLAG_PAYLOAD 0xAB
+
+#define PIN_PAYLOAD 13
 
 //Payload variables
 #define MAX_BUF 16  // Maximum payload size 
@@ -24,7 +32,7 @@ struct Payload {
   long longitude;//-76.5018;
   int altitude;//9999
   byte flags;//0xF;
-} payload, *ptr_payload;
+} payload;
 
 Payload* ptr_payload = &payload;
 
@@ -43,10 +51,11 @@ Adafruit_GPS GPS(&gpsSerial);
 
 void setup()
 {
+  pinMode(PIN_PAYLOAD, OUTPUT);
+  
   //Make sure XBee baud matches hardware config
   XBee.begin(115200);
   Serial.begin(115200);
-  //delay(5000);
 
   // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
   GPS.begin(9600);
@@ -57,7 +66,7 @@ void setup()
   //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
 
   // Set update rate
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_5HZ);   // 1/5 Hz
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1/5 Hz
 
   // Request updates on antenna status
   GPS.sendCommand(PGCMD_ANTENNA);
@@ -73,20 +82,41 @@ uint32_t timer = millis();
 
 void loop()
 {
-  //request GPS data
-  GPS.read();
-
+  gpsSerial.listen(); //switch to GPS serial
+  while (gpsSerial.available()) {
+    char c = GPS.read();
+  // if you want to debug, this is a good time to do it!
+  if ((c))
+    Serial.write(c); 
+  }
+  XBee.listen();
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
       return;  // we can fail to parse a sentence in which case we should just wait for another
   }
-
+ 
   // if millis() or timer wraps around, reset
   if (timer > millis())  timer = millis();
-
   if (millis() - timer > 400) {
     timer = millis(); // reset the timer
+
+    if (XBee.available()) {
+      byte receivedPayload = XBee.read();
+      switch (receivedPayload) {
+        case FLAG_PAYLOAD:
+          digitalWrite(PIN_PAYLOAD,HIGH);
+          break;
+        default:
+          digitalWrite(PIN_PAYLOAD,LOW);
+          break;
+      }
+      #ifdef readDebug
+        Serial.print("size: ");
+        Serial.println(XBee.available());
+        Serial.println(receivedPayload, HEX);
+      #endif
+    }
     
     #ifdef fakeGPS //fake gps data
       payload.latitude = 42.4439*10000;
@@ -129,7 +159,7 @@ void loop()
       XBee.write(buf_start, buf_size);
       //arduino is little endian (LSB first)
       
-      #ifdef debug
+      #ifdef writeDebug
         //check that buffer size did not exceed allocated size
         if( buf_size > MAX_BUF )
         {
@@ -145,6 +175,10 @@ void loop()
           bufferReader++;
         }
         Serial.println();
+        
+          if (XBee.overflow()) {
+           Serial.println("XBee serial buffer overflow!");
+          } 
       #endif
   }
 }

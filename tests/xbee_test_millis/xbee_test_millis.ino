@@ -4,9 +4,9 @@
 
 byte *payload;
 
-// XBee's DOUT (TX) is connected to pin 2 (Arduino's Software RX)
-// XBee's DIN (RX) is connected to pin 3 (Arduino's Software TX)
-SoftwareSerial XBee(2,3); // RX, TX
+// XBee's DOUT (TX) is connected to pin 10 (Arduino's Software RX)
+// XBee's DIN (RX) is connected to pin 9 (Arduino's Software TX)
+SoftwareSerial XBee(10,9); // RX, TX
 
 void setup()
 {
