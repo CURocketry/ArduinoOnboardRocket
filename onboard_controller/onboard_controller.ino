@@ -16,10 +16,12 @@
 #define FLAG_GPS_FIX 0b00000001
 #define FLAG_PAYLOAD 0b00000010
 
+//directives received from ground station
 //make sure these match on the sending end
-#define FLAG_PAYLOAD 0xAB
+#define DIR_TEST 0xAB
+#define DIR_PAYLOAD 0xACDIR_TEST
 
-#define PIN_PAYLOAD 13
+#define PIN_TEST 13
 
 //Payload variables
 #define MAX_BUF 16  // Maximum payload size 
@@ -52,7 +54,7 @@ Adafruit_GPS GPS(&gpsSerial);
 
 void setup()
 {
-  pinMode(PIN_PAYLOAD, OUTPUT);
+  pinMode(PIN_TEST, OUTPUT);
   
   //Make sure Serial baud matches hardware config
   Serial1.begin(57600); //XBee baud rate
@@ -67,7 +69,7 @@ void setup()
   //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
 
   // Set update rate
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1/5 Hz
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_5HZ);   // 1/5 Hz
 
   // Request updates on antenna status
   GPS.sendCommand(PGCMD_ANTENNA);
@@ -102,13 +104,13 @@ void loop()
   if (Serial1.available()) {
     byte receivedPayload = Serial1.read();
     switch (receivedPayload) {
-      case FLAG_PAYLOAD:
-        if ( digitalRead(PIN_PAYLOAD) == HIGH )
-          digitalWrite(PIN_PAYLOAD,LOW);
-        else digitalWrite(PIN_PAYLOAD,HIGH);
+      case DIR_TEST:
+        if ( digitalRead(PIN_TEST) == HIGH )
+          digitalWrite(PIN_TEST,LOW);
+        else digitalWrite(PIN_TEST,HIGH);
         break;
       default:
-        digitalWrite(PIN_PAYLOAD,LOW);
+        digitalWrite(PIN_TEST,LOW);
         break;
     }
     #ifdef readDebug
@@ -120,7 +122,7 @@ void loop()
   
   // if millis() or timer wraps around, reset
   if (timer > millis())  timer = millis();
-  if (millis() - timer > 400) {
+  if (millis() - timer > 250) {
     timer = millis(); // reset the timer
     
     #ifdef fakeGPS //fake gps data
@@ -160,10 +162,9 @@ void loop()
 
       //buffer size is the difference between the current and start pointers
       buf_size = buf_curr - buf_start;
-
-      Serial1.write(buf_start, buf_size);
-       delayMicroseconds(50);
+      
       //arduino is little endian (LSB first)
+      Serial1.write(buf_start, buf_size);
       
       #ifdef writeDebug
         //check that buffer size did not exceed allocated size
