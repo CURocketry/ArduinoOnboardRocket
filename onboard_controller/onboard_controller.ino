@@ -27,13 +27,14 @@ byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
 //fake data
-struct Payload {
+typedef struct Payload {
   long latitude; //42.4439;
   long longitude;//-76.5018;
   int altitude;//9999
   byte flags;//0xF;
-} payload;
+} Payload;
 
+Payload payload;
 Payload* ptr_payload = &payload;
 
 enum States {
@@ -54,7 +55,7 @@ void setup()
   pinMode(PIN_PAYLOAD, OUTPUT);
   
   //Make sure XBee baud matches hardware config
-  XBee.begin(115200);
+  XBee.begin(57600);//115200);
   Serial.begin(115200);
 
   // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
@@ -83,25 +84,23 @@ uint32_t timer = millis();
 void loop()
 {
   gpsSerial.listen(); //switch to GPS serial
+  delayMicroseconds(150);
   while (gpsSerial.available()) {
     char c = GPS.read();
   // if you want to debug, this is a good time to do it!
   if ((c))
     Serial.write(c); 
   }
+  
   XBee.listen();
+  
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
       return;  // we can fail to parse a sentence in which case we should just wait for another
   }
  
-  // if millis() or timer wraps around, reset
-  if (timer > millis())  timer = millis();
-  if (millis() - timer > 400) {
-    timer = millis(); // reset the timer
-
-    if (XBee.available()) {
+     if (XBee.available()) {
       byte receivedPayload = XBee.read();
       switch (receivedPayload) {
         case FLAG_PAYLOAD:
@@ -117,6 +116,10 @@ void loop()
         Serial.println(receivedPayload, HEX);
       #endif
     }
+  // if millis() or timer wraps around, reset
+  if (timer > millis())  timer = millis();
+  if (millis() - timer > 400) {
+    timer = millis(); // reset the timer
     
     #ifdef fakeGPS //fake gps data
       payload.latitude = 42.4439*10000;
