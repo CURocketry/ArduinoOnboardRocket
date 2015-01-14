@@ -13,13 +13,11 @@
 #define MARKER_LON 0xFC
 #define MARKER_ALT 0xFD
 #define MARKER_FLAG 0xFE
-#define FLAG_GPS_FIX 0b00000001
-#define FLAG_PAYLOAD 0b00000010
 
 //directives received from ground station
 //make sure these match on the sending end
 #define DIR_TEST 0xAB
-#define DIR_PAYLOAD 0xACDIR_TEST
+#define DIR_PAYLOAD 0xAC
 
 #define PIN_TEST 13
 
@@ -29,14 +27,22 @@ int buf_size; //actual size of buffer
 byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
-//fake data
-typedef struct Payload {
-  long latitude; //42.4439;
-  long longitude;//-76.5018;
-  int altitude;//9999
-  byte flags;//0xF;
+typedef struct {
+  unsigned int gps_fix : 1;
+  unsigned int payload_abort : 1;
+  unsigned int test : 1;
+  unsigned int padding : 5;
+} Flags;
+
+typedef struct {
+  long latitude;
+  long longitude;
+  int altitude;
+  Flags flags;
 } Payload;
 
+
+Flags flags;
 Payload payload;
 Payload* ptr_payload = &payload;
 
@@ -105,9 +111,14 @@ void loop()
     byte receivedPayload = Serial1.read();
     switch (receivedPayload) {
       case DIR_TEST:
-        if ( digitalRead(PIN_TEST) == HIGH )
+        if ( digitalRead(PIN_TEST) == LOW ) {
+          digitalWrite(PIN_TEST,HIGH);
+          payload.flags.test = 1;
+        }
+        else {
           digitalWrite(PIN_TEST,LOW);
-        else digitalWrite(PIN_TEST,HIGH);
+          payload.flags.test = 0;
+        }
         break;
       default:
         digitalWrite(PIN_TEST,LOW);
