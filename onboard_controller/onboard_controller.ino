@@ -1,6 +1,7 @@
 #include <math.h>
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
+#include "payload_def.h"
 
 /*--debug macros--*/
 //#define readDebug //print Serial1 reads to console
@@ -8,18 +9,8 @@
 #define fakeGPS //fake the presence of a gps
 //#define rawGPSDebug //print raw gps data to console
 
-//make sure these match on the receiving end
-#define MARKER_LAT 0xFB
-#define MARKER_LON 0xFC
-#define MARKER_ALT 0xFD
-#define MARKER_FLAG 0xFE
-
-//directives received from ground station
-//make sure these match on the sending end
-#define DIR_TEST 0xAB
-#define DIR_PAYLOAD 0xAC
-
 #define PIN_TEST 13
+#define PIN_PAYLOAD_ABORT 12
 
 //Payload variables
 #define MAX_BUF 16  // Maximum payload size 
@@ -27,27 +18,12 @@ int buf_size; //actual size of buffer
 byte* buf_start = (byte*)malloc( MAX_BUF ); //allocate starting payload pointer
 byte* buf_curr; //current position of buffer
 
-typedef struct {
-  unsigned int gps_fix : 1;
-  unsigned int payload_abort : 1;
-  unsigned int test : 1;
-  unsigned int padding : 5;
-} Flags;
-
-typedef struct {
-  long latitude;
-  long longitude;
-  int altitude;
-  Flags flags;
-} Payload;
-
-
-Flags flags;
 Payload payload;
+Payload payload_start;
 Payload* ptr_payload = &payload;
 
 enum States {
-  STOPPED, PRE_LAUNCH, POST_LAUNCH, SEND_DATA, READ_DATA, READ_GPS, ERROR 
+  STOPPED, PRE_LAUNCH, POST_LAUNCH, ERROR 
 };
 
 States state = STOPPED;
@@ -61,6 +37,7 @@ Adafruit_GPS GPS(&gpsSerial);
 void setup()
 {
   pinMode(PIN_TEST, OUTPUT);
+  pinMode(PIN_PAYLOAD_ABORT, OUTPUT);
   
   //Make sure Serial baud matches hardware config
   Serial1.begin(57600); //XBee baud rate
@@ -120,6 +97,17 @@ void loop()
           payload.flags.test = 0;
         }
         break;
+      case DIR_PAYLOAD_ABORT:
+        digitalWrite(PIN_PAYLOAD_ABORT, HIGH);
+        payload.flags.payload_abort = 1;
+        break;
+      case DIR_PAYLOAD_ABORT_CANCEL:
+        digitalWrite(PIN_PAYLOAD_ABORT, LOW);
+        payload.flags.payload_abort = 0;
+        break;
+      case DIR_BEGIN_LAUNCH:
+        
+        break;
       default:
         digitalWrite(PIN_TEST,LOW);
         break;
@@ -140,13 +128,9 @@ void loop()
       payload.latitude = 42.4439*10000;
       payload.longitude = 76.5018*10000;
       payload.altitude = 9999;
-      state = SEND_DATA;
     #else    
       if (GPS.fix) {
-        payload.latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
-        payload.longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
-        payload.altitude = GPS.altitude;
-        state = SEND_DATA;
+        setGPSPayload(payload);
       }
       else {
         payload.latitude = 0;
@@ -227,4 +211,11 @@ double convertDegMinToDecDeg (float degMin) {
   decDeg = degMin + ( min / 60 );
 
   return decDeg;
+}
+
+Payload setGpsPayload(Payload payload) {
+  payload.latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
+  payload.longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
+  payload.altitude = GPS.altitude;
+  return payload;
 }
