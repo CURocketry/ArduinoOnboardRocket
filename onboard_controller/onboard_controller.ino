@@ -68,15 +68,12 @@ uint32_t timer = millis();
 
 void loop()
 {
-  #ifdef rawGPSDebug
-    while (gpsSerial.available()) {
-      char c = GPS.read();
+        char c = GPS.read();
+      #ifdef rawGPSDebug
       if (c) {
         Serial.write(c);
-      } 
-    }
-  #endif
-  
+      }
+      #endif
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
@@ -128,18 +125,24 @@ void loop()
       payload.latitude = 42.4439*10000;
       payload.longitude = 76.5018*10000;
       payload.altitude = 9999;
+      payload.flags.gps_fix = 1;
     #else    
       if (GPS.fix) {
-        setGPSPayload(payload);
-      }
+        payload.latitude = convertDegMinToDecDeg(GPS.latitude)*10000;
+        payload.longitude = convertDegMinToDecDeg(GPS.longitude)*10000;
+        payload.altitude = GPS.altitude;
+        payload.flags.gps_fix = 1;  
+    }
       else {
         payload.latitude = 0;
         payload.longitude = 0;
         payload.altitude = 0;
+        payload.flags.gps_fix = 0;
         
         #ifdef debug
           Serial.println("No fix");
         #endif
+      }
     #endif
       
       //set every byte in array to 0
@@ -147,11 +150,11 @@ void loop()
 
       //buf_start is pointer to first allocated space
       //buf_curr is pointer to next free space
-      if (payload.latitude != 0 && payload.longitude != 0 && payload.altitude != 0) {
+      //if (payload.latitude != 0 && payload.longitude != 0 && payload.altitude != 0) {
         buf_curr = stream(MARKER_LAT, buf_start, (void*)&(ptr_payload->latitude), sizeof(payload.latitude));
         buf_curr = stream(MARKER_LON, buf_curr, (void*)&(ptr_payload->longitude), sizeof(payload.longitude));
         buf_curr = stream(MARKER_ALT, buf_curr, (void*)&(ptr_payload->altitude), sizeof(payload.altitude));
-      }
+      //}
       
       buf_curr = stream(MARKER_FLAG, buf_curr, (void*)&(ptr_payload->flags), sizeof(payload.flags));
 

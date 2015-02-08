@@ -20,7 +20,7 @@ typedef struct {
   unsigned int main_launch : 1;
   unsigned int landed : 1;
   unsigned int test : 1;
-  unsigned int padding : 5;
+  unsigned int padding : 3;
 } Flags;
 
 typedef struct {
