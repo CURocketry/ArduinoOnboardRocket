@@ -6,8 +6,11 @@
 /*--debug macros--*/
 //#define readDebug //print Serial1 reads to console
 //#define writeDebug //print Serial1 writes to console
-#define fakeGPS //fake the presence of a gps
+//#define fakeGPS //fake the presence of a gps
 //#define rawGPSDebug //print raw gps data to console
+
+#define LAUNCH_TX_PD 250;
+#define STANDBY_TX_PD 3000;
 
 #define PIN_TEST 13
 #define PIN_PAYLOAD_ABORT 12
@@ -22,15 +25,10 @@ Payload payload;
 Payload payload_start;
 Payload* ptr_payload = &payload;
 
-enum States {
-  STOPPED, PRE_LAUNCH, POST_LAUNCH, ERROR 
-};
-
-States state = STOPPED;
+int tx_pd = STANDBY_TX_PD; //time between message transmission, in ms
 
 // XBee's DOUT (TX) is connected to pin 0 (Arduino's Hardware RX)
 // XBee's DIN (RX) is connected to pin 1 (Arduino's Hardware TX)
-
 SoftwareSerial gpsSerial(8, 7);
 Adafruit_GPS GPS(&gpsSerial);
 
@@ -103,7 +101,8 @@ void loop()
         payload.flags.payload_abort = 0;
         break;
       case DIR_BEGIN_LAUNCH:
-        
+        payload.flags.main_launch = 1;
+        tx_pd = LAUNCH_TX_PD;
         break;
       default:
         digitalWrite(PIN_TEST,LOW);
@@ -118,7 +117,7 @@ void loop()
   
   // if millis() or timer wraps around, reset
   if (timer > millis())  timer = millis();
-  if (millis() - timer > 250) {
+  if (millis() - timer > tx_pd) {
     timer = millis(); // reset the timer
     
     #ifdef fakeGPS //fake gps data
